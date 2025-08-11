@@ -1,16 +1,35 @@
 # Portainer Compose
 
-This repository provides two Compose files:
+This repository provides multiple Compose variants so you can choose the desired deployment role for this machine:
 
-1. `docker-compose.yml` – Runs the Portainer Server (UI + management backend).
-2. `docker-compose-agent.yml` – Runs the Portainer Agent (intended for Docker Swarm / multi-node setups).
+1. `docker-compose-host.yml` – Portainer Server (UI + management backend) running locally to manage this host (and optionally others you add later).
+2. `docker-compose-edge-agent.yml` – Portainer Edge Agent only (this node is managed remotely by an existing Portainer instance – no local UI).
+3. (Legacy / Swarm) `docker-compose-agent.yml` – Agent service definition for Swarm global mode when pairing with a separately deployed server stack.
 
-Use ONLY the server compose file for a single-host setup. Use BOTH (as stacks) when you want to manage multiple swarm nodes via the Portainer Agent.
+HOW TO CHOOSE:
+* If this machine SHOULD HOST the Portainer UI: copy `docker-compose-host.yml` to `docker-compose.yml`.
+* If this machine SHOULD ONLY BE AN EDGE AGENT (managed remotely): copy `docker-compose-edge-agent.yml` to `docker-compose.yml`.
+* For a Swarm with multiple nodes where this node runs the server AND you also want agents globally, deploy the server with the host file (renamed to `docker-compose.yml`) and then deploy the Swarm agent stack separately (see Multi-Node section).
+
+Copy command examples:
+```bash
+# Host (Portainer Server) mode
+cp docker-compose-host.yml docker-compose.yml
+
+# Edge Agent only mode
+cp docker-compose-edge-agent.yml docker-compose.yml
+```
+
+After copying, adjust `.env` (especially Edge ID / Edge Key for edge mode) before `docker compose up -d`.
+
+> NOTE: The currently committed `docker-compose.yml` in this branch is configured for **Edge Agent mode** (it contains only the `agent` service). If you intend to run the full Portainer Server UI on this node, replace it by copying `docker-compose-host.yml` over it.
 
 ---
 ## Files
-- `docker-compose.yml` – Portainer Server definition.
-- `docker-compose-agent.yml` – Portainer Agent (global service) for Swarm.
+- `docker-compose-host.yml` – Template for running the Portainer Server locally.
+- `docker-compose-edge-agent.yml` – Template for running ONLY the Edge Agent on this node.
+- `docker-compose-agent.yml` – (Swarm) Global agent service definition (used with `docker stack deploy`).
+- `docker-compose.yml` – Active file Docker Compose will use (create by copying one of the above).
 - `create_volumes.sh` – Creates the bind-mounted data directory (`/storage/portainer/data`). Requires root (`sudo`).
 - `.env` / `.env.example` – Centralized configuration variables.
 
@@ -27,8 +46,30 @@ Defined in `.env` (copy from `.env.example` first):
 
 You may change the host bind directory in the compose files if `/storage/portainer/data` is not suitable.
 
+### Additional Environment Variables (Edge Agent Mode)
+These are only required (or meaningful) when you deploy using `docker-compose-edge-agent.yml` (Edge Agent only mode):
+
+| Variable | Required | Purpose | Notes |
+|----------|----------|---------|-------|
+| `EDGE` | Yes | Enables Edge agent features | Always set to `1` for Edge mode. |
+| `EDGE_ID` | Yes | Unique identifier for this Edge endpoint | Provided by your remote Portainer instance when adding an Edge environment. |
+| `EDGE_KEY` | Yes | Auth + configuration bootstrap string (contains URL + token) | Copy EXACTLY as generated; treat as secret. Regenerate if leaked. |
+| `EDGE_INSECURE_POLL` | Optional | Allow insecure (non-TLS) polling to the Edge endpoint | Set to `1` only if your Edge server runs without TLS (development). Remove or set `0` for production HTTPS. |
+| `LOG_LEVEL` | Optional | Adjust agent logging verbosity | Common values: `INFO`, `DEBUG` (default in template set to `DEBUG`). Use `INFO` in production. |
+
+Edge variables lifecycle:
+1. In your remote Portainer UI: Add Environment → Edge Agent → copy generated `EDGE_ID` & `EDGE_KEY`.
+2. Paste into `.env` (or directly into compose file if preferred, but `.env` is cleaner).
+3. Start the agent: `docker compose up -d`.
+4. In the Portainer UI the environment should appear as "Up" once the reverse tunnel is established (may take a few seconds).
+
+Security tips:
+* Rotate (regenerate) the Edge Key if you suspect compromise.
+* Avoid committing real `EDGE_ID` / `EDGE_KEY` values—use placeholders in public repos.
+* Prefer HTTPS termination (so you can omit `EDGE_INSECURE_POLL`).
+
 ---
-## Quick Start (Single Host – No Swarm, Just Portainer Server)
+## Quick Start (Single Host – Portainer Server Mode)
 
 Use this if you only need to manage the local Docker engine.
 
@@ -36,20 +77,28 @@ Use this if you only need to manage the local Docker engine.
 # 1. Clone repo & enter directory
 # git clone <this-repo> && cd portainer-compose
 
-# 2. Prepare environment file
+# 2. Pick mode (host server vs edge agent) and copy template
+# Host (Server) mode:
+cp docker-compose-host.yml docker-compose.yml
+# OR Edge Agent only mode:
+# cp docker-compose-edge-agent.yml docker-compose.yml
+
+# 3. Prepare environment file
 cp .env.example .env
 
-# 3. Create external bridge network (if it does not already exist)
+# 4. Create external bridge network (if it does not already exist)
 docker network create ${SHARED_DOCKER_NETWORK}
 
-# 4. Create data directory (runs as root because path is under /storage)
+# 5. (Server mode only) Create data directory (runs as root because path is under /storage)
 sudo ./create_volumes.sh
 
-# 5. Start Portainer Server
-docker compose up -d   # or: docker-compose up -d
+# 6. Start (Server or Edge Agent depending on what you copied)
+docker compose up -d
 
-# 6. Access UI
+# 7. (Server mode) Access UI
 open http://localhost:${PORTAINER_PORT}
+
+# Edge Agent mode: No local UI. In your remote Portainer instance, add/register the Edge environment using the Edge ID / Edge Key you placed in `.env`.
 ```
 
 Cleanup (optional):

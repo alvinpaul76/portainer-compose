@@ -19,7 +19,25 @@ services:
       - shared-network
     restart: always
     ports:
-      - "${PORTAINER_PORT}:9000"   # Portainer web UI
+      - "127.0.0.1:${PORTAINER_PORT}:9000"      # Portainer web UI (HTTP)
+      - "127.0.0.1:${PORTAINER_HTTPS_PORT}:9443" # Portainer web UI (HTTPS)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock   # Docker socket
       - portainer_data:/data                        # Persistent Portainer data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 1.0
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

@@ -99,8 +99,8 @@ for path in "${RESOLVED_PATHS[@]}"; do
     fi
 done
 
-# Set appropriate permissions
-if chmod -R 777 "$BASE_DIR"; then
+# Set restrictive permissions (owner rwx, group rx, no access for others)
+if chmod -R 750 "$BASE_DIR"; then
     echo "✓ Set permissions for $BASE_DIR"
 else
     echo "✗ Failed to set permissions for $BASE_DIR"

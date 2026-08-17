@@ -31,6 +31,7 @@ services:
       - EDGE_KEY=${PORTAINER_EDGE_KEY}
       - EDGE_INSECURE_POLL=${PORTAINER_EDGE_INSECURE_POLL}
       - LOG_LEVEL=${PORTAINER_LOG_LEVEL}
+      - AGENT_CLUSTER_ADDR=portainer-agent
     networks:
       - agent_network
       - shared-network

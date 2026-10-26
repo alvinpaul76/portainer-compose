@@ -8,14 +8,14 @@ This document summarizes the security hardening changes applied to the Portainer
 
 ## 1. Image Pinning
 
-Images currently use `:latest` for automatic updates.
+Images are pinned via `PORTAINER_VERSION` (default `2.45.3`).
 
 | Service           | Current Tag                      | Recommended (pinned)            |
 | ----------------- | -------------------------------- | ------------------------------- |
-| Portainer Server  | `portainer/portainer-ce:latest`  | `portainer/portainer-ce:2.39.6` |
-| Portainer Agent   | `portainer/agent:latest`         | `portainer/agent:2.39.6`        |
+| Portainer Server  | `portainer/portainer-ce:${PORTAINER_VERSION}` | `portainer/portainer-ce:2.45.3` |
+| Portainer Agent   | `portainer/agent:${PORTAINER_VERSION}`        | `portainer/agent:2.45.3`        |
 
-**Recommendation:** For stricter supply-chain control, pin to a specific version and update deliberately after reviewing release notes. The initial hardening pinned images to `2.39.6` but this was reverted to `:latest` in favor of automatic updates.
+**Recommendation:** For stricter supply-chain control, pin to a specific version and update deliberately after reviewing release notes.
 
 ---
 
@@ -26,9 +26,8 @@ Images currently use `:latest` for automatic updates.
 
 | Service | Port Mapping                       |
 | ------- | ---------------------------------- |
-| Server  | `127.0.0.1:${PORTAINER_PORT}:9000` |
 | Server  | `127.0.0.1:${PORTAINER_HTTPS_PORT}:9443` |
-| Agent   | `127.0.0.1:${PORTAINER_AGENT_PORT}:9001` |
+| nginx   | `127.0.0.1:${NGINX_PORT}:80` (nginx variant only) |
 
 **Why:** Services are not directly exposed to external interfaces. Use a reverse proxy (e.g., Cloudflare Tunnel via the `shared-network`) for external access with TLS.
 
@@ -36,8 +35,8 @@ Images currently use `:latest` for automatic updates.
 
 ## 3. HTTPS Port Added
 
-**Before:** Only HTTP port `9000` exposed.
-**After:** HTTPS port `9443` also exposed via new env var `PORTAINER_HTTPS_PORT=9443`.
+**Before:** Only HTTP port `9000` exposed (HTTP is now disabled by default in Portainer, so it is no longer published).
+**After:** HTTPS port `9443` exposed via new env var `PORTAINER_HTTPS_PORT=9443`.
 
 **Why:** Portainer supports native HTTPS on port `9443` with a self-signed certificate. Prefer `https://localhost:9443` for direct access. Configure a custom certificate in the Portainer UI for production.
 
@@ -80,12 +79,7 @@ Prevents a single container from exhausting host resources.
 
 ## 6. Healthchecks
 
-Both server and agent include healthchecks so Docker can detect and restart unhealthy containers.
-
-| Service | Check                                              | Interval | Timeout | Retries | Start Period |
-| ------- | -------------------------------------------------- | -------- | ------- | ------- | ------------ |
-| Server  | `wget --spider -q http://localhost:9000`           | 30s      | 5s      | 3       | 30s          |
-| Agent   | `wget --spider -q http://localhost:9001`           | 30s      | 5s      | 3       | 15s          |
+The Portainer server and agent images are scratch-based (no shell, `wget` or `curl`), so a CMD-based healthcheck can never succeed and has been removed. Only the nginx proxy has one (`wget --spider -q http://127.0.0.1:80/nginx-health`, 30s interval).
 
 ---
 
@@ -111,10 +105,10 @@ Both server and agent include healthchecks so Docker can detect and restart unhe
 
 | File                              | Changes                                                    |
 | --------------------------------- | ---------------------------------------------------------- |
-| `docker-compose-host.yml`         | Image pin, HTTPS port, localhost binding, isolation, resource limits, healthcheck |
-| `docker-compose-edge-agent.yml`   | Image pin, localhost binding, isolation, resource limits, healthcheck, `/data` named volume |
+| `host/docker-compose.yml`         | Image pin, HTTPS port, localhost binding, isolation, resource limits |
+| `edge-agent/docker-compose.yml`   | Image pin, localhost binding, isolation, resource limits, `/data` named volume, no inbound port |
 | `create_volumes.sh`               | `chmod 777` → `chmod 750`                                  |
-| `.env.example`                    | Added `PORTAINER_HTTPS_PORT`, `LOG_LEVEL` → `INFO`         |
+| `<variant>/.env.example`          | Per-variant env files; `LOG_LEVEL` → `INFO`, pinned `PORTAINER_VERSION` |
 | `README.md`                       | Added Security Hardening section, updated env var table, updated notes |
 
 ---

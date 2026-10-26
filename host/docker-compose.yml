@@ -1,6 +1,6 @@
 networks:
   shared-network:
-    name: ${SHARED_DOCKER_NETWORK}
+    name: ${SHARED_DOCKER_NETWORK:?set SHARED_DOCKER_NETWORK in .env}
     external: true
 
 volumes:
@@ -8,19 +8,19 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: ${DEFAULT_STORAGE_FOLDER}/data
+      device: ${DEFAULT_STORAGE_FOLDER:?set DEFAULT_STORAGE_FOLDER in .env}/data
       o: bind
 
 services:
   portainer:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:${PORTAINER_VERSION:-2.45.3}
     container_name: portainer
     networks:
       - shared-network
-    restart: always
+    restart: unless-stopped
     ports:
-      - "127.0.0.1:${PORTAINER_PORT}:9000"      # Portainer web UI (HTTP)
-      - "127.0.0.1:${PORTAINER_HTTPS_PORT}:9443" # Portainer web UI (HTTPS)
+      # HTTP (9000) is disabled by default in current Portainer releases; use HTTPS.
+      - "127.0.0.1:${PORTAINER_HTTPS_PORT:-9443}:9443" # Portainer web UI (HTTPS)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock   # Docker socket
       - portainer_data:/data                        # Persistent Portainer data
@@ -35,9 +35,5 @@ services:
     mem_reservation: 256m
     cpus: 1.0
     pids_limit: 200
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9000"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # No healthcheck: the Portainer image is scratch-based (no shell, wget or curl),
+    # so any CMD-based check would always report "unhealthy".

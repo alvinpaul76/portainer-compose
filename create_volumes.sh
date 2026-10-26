@@ -5,25 +5,37 @@ SCRIPT_DIR="$(dirname "$0")"
 # Check if script is run as root
 if [ "$(id -u)" != "0" ]; then
     echo "This script must be run with sudo privileges"
-    echo "Please run: sudo $0"
+    echo "Usage: sudo $0 <host|nginx|edge-agent>"
+    exit 1
+fi
+
+# Target deployment: host, nginx or edge-agent
+TARGET="$1"
+if [ "$TARGET" != "host" ] && [ "$TARGET" != "nginx" ] && [ "$TARGET" != "edge-agent" ]; then
+    echo "Usage: sudo $0 <host|nginx|edge-agent>"
     exit 1
 fi
 
 # Check if .env exists and load it
-ENV_FILE="$SCRIPT_DIR/.env"
+ENV_FILE="$SCRIPT_DIR/$TARGET/.env"
 if [ ! -f "$ENV_FILE" ]; then
     echo "Error: .env file not found at $ENV_FILE"
+    echo "Create it first: cp $TARGET/.env.example $TARGET/.env"
     exit 1
 fi
 
-# Load .env into current environment, ignoring comments and empty lines
-set -o allexport
-# shellcheck disable=SC1090
-source <(grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$')
-set +o allexport
+# Load KEY=VALUE pairs from .env without executing them as shell code
+# (values such as <placeholders> would break `source`)
+while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+    value="${BASH_REMATCH[2]}"
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+    export "${BASH_REMATCH[1]}=$value"
+done < "$ENV_FILE"
 
 # Check if docker-compose.yml exists
-DOCKER_COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+DOCKER_COMPOSE_FILE="$SCRIPT_DIR/$TARGET/docker-compose.yml"
 if [ ! -f "$DOCKER_COMPOSE_FILE" ]; then
     echo "Error: docker-compose.yml not found at $DOCKER_COMPOSE_FILE"
     exit 1
@@ -33,7 +45,9 @@ fi
 # Fails with an error if any referenced variable is undefined.
 resolve_variables() {
     local input="$1"
-    local resolved="$input"
+    # Reduce ${VAR:?msg} / ${VAR:-default} to ${VAR}; the value must come from .env
+    local resolved
+    resolved=$(sed -E 's/\$\{([A-Za-z_][A-Za-z0-9_]*):[-?][^}]*\}/${\1}/g' <<< "$input")
     local max_passes=10
     local pass=0
 
@@ -45,7 +59,7 @@ resolve_variables() {
 
         local var_name="${BASH_REMATCH[1]}"
         if [ -z "${!var_name+x}" ]; then
-            echo "Error: Variable '\${$var_name}' referenced in docker-compose.yml is not defined in .env" >&2
+            echo "Error: Variable '\${$var_name}' referenced in docker-compose.yml is not defined in $TARGET/.env" >&2
             exit 1
         fi
 
@@ -60,12 +74,12 @@ echo "Creating required directories based on docker-compose.yml volumes..."
 
 # Extract raw device paths from docker-compose.yml using grep and awk
 echo "Extracting volume paths from docker-compose.yml..."
-RAW_DEVICE_PATHS=$(grep -A 2 "device:" "$DOCKER_COMPOSE_FILE" | grep "device:" | awk '{print $2}')
+RAW_DEVICE_PATHS=$(grep -A 2 "device:" "$DOCKER_COMPOSE_FILE" | grep "device:" | sed -E 's/^[[:space:]]*device:[[:space:]]*//')
 
 # Check if we found any paths
 if [ -z "$RAW_DEVICE_PATHS" ]; then
-    echo "Error: No volume device paths found in docker-compose.yml"
-    exit 1
+    echo "✓ $TARGET uses no bind-mounted volumes; nothing to create."
+    exit 0
 fi
 
 # Resolve variables in each path and collect resolved paths
@@ -81,7 +95,7 @@ done <<< "$RAW_DEVICE_PATHS"
 if [ -n "${DEFAULT_STORAGE_FOLDER+x}" ]; then
     BASE_DIR=$(resolve_variables "${DEFAULT_STORAGE_FOLDER}")
 else
-    echo "✗ DEFAULT_STORAGE_FOLDER environment variable is not defined in .env"
+    echo "✗ DEFAULT_STORAGE_FOLDER environment variable is not defined in $TARGET/.env"
     exit 1
 fi
 
@@ -108,4 +122,4 @@ else
 fi
 
 echo "✓ All required directories have been created successfully!"
-echo "✓ You can now run 'docker-compose up -d' to start the Cre8or Docker services."
+echo "✓ You can now run 'docker compose up -d' inside $TARGET/ to start Portainer."

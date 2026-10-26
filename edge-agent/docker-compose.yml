@@ -5,6 +5,11 @@ networks:
 
 volumes:
   agent_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${DEFAULT_STORAGE_FOLDER:?set DEFAULT_STORAGE_FOLDER in .env}/agent_data
+      o: bind
 
 services:
   agent:
@@ -22,6 +27,7 @@ services:
       - EDGE_KEY=${PORTAINER_EDGE_KEY:?set PORTAINER_EDGE_KEY in .env}
       - EDGE_INSECURE_POLL=${PORTAINER_EDGE_INSECURE_POLL:-0}
       - LOG_LEVEL=${PORTAINER_LOG_LEVEL:-INFO}
+      - AGENT_CLUSTER_ADDR=${AGENT_CLUSTER_ADDR:?set AGENT_CLUSTER_ADDR in .env}
     networks:
       - shared-network
     security_opt:

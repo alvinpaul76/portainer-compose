@@ -22,7 +22,7 @@ Example:
 ```bash
 cd host                      # or nginx / edge-agent
 cp .env.example .env         # then edit .env
-cd .. && sudo ./create_volumes.sh host   # not needed for edge-agent
+cd .. && sudo ./create_volumes.sh host   # run for every variant
 cd host && docker compose up -d
 ```
 
@@ -43,7 +43,7 @@ Each variant documents its own environment variables, deploy steps and operation
 ## Repository layout
 
 - `host/`, `nginx/`, `edge-agent/` – one deployment each: `docker-compose.yml`, `.env.example`, `README.md` (nginx also has `nginx.conf`).
-- `create_volumes.sh` – Creates the bind-mounted data directory for a variant: `sudo ./create_volumes.sh <host|nginx|edge-agent>`. Requires root. Not needed for `edge-agent`.
+- `create_volumes.sh` – Creates the bind-mounted data directory for a variant: `sudo ./create_volumes.sh <host|nginx|edge-agent>`. Requires root.
 - `SECURITY_HARDENING.md` – Security measures applied to the compose files, and remaining risks (notably Docker socket access).
 - (Not included) `docker-compose-agent.yml` – Would define a Swarm global agent service if you add Swarm later.
 

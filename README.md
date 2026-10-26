@@ -2,69 +2,61 @@
 
 This repository provides Compose variants so you can choose the deployment role for this machine:
 
-1. `docker-compose-host.yml` – Portainer Server (UI + management backend) running locally to manage this host (and optionally others you add later).
-2. `docker-compose-edge-agent.yml` – Portainer Edge Agent only (this node is managed remotely by an existing Portainer instance – no local UI).
-3. `docker-compose-nginx.yml` – Portainer Server behind an nginx reverse proxy (nginx `1.31.3-alpine`), exposing the UI on port `8080` for Cloudflare Tunnel or similar.
-4. `docker-compose.yml` – The currently active compose file you run. **Not tracked in git** — create it by copying one of the templates above.
+1. `host/` – Portainer Server (UI + management backend) running locally to manage this host (and optionally others you add later).
+2. `nginx/` – Portainer Server behind an nginx reverse proxy (nginx `1.31.3-alpine`) on a private network, exposing the UI on `127.0.0.1:8080` for Cloudflare Tunnel or similar. This is the more locked-down server variant.
+3. `edge-agent/` – Portainer Edge Agent only (this node is managed remotely by an existing Portainer instance – no local UI).
+
+Each folder is an independent deployment with its own `docker-compose.yml` and `.env.example`. Copy `.env.example` to `.env` inside the folder you pick, then run `docker compose up -d` there.
 
 NOTE ABOUT SWARM: A Swarm "global" agent compose file (`docker-compose-agent.yml`) is referenced in some Portainer docs but is NOT included in this repo right now. If you intend to run a Swarm with a global agent service, you can add that file later (see the Swarm section for guidance). Until then, this repo focuses on single‑node server mode or Edge Agent mode.
 
 HOW TO CHOOSE:
 
-- Host (Server) mode (you want the UI here): copy `docker-compose-host.yml` to `docker-compose.yml`.
-- Edge Agent only mode (UI is elsewhere): copy `docker-compose-edge-agent.yml` to `docker-compose.yml`.
-- Server with nginx proxy (UI behind reverse proxy): copy `docker-compose-nginx.yml` to `docker-compose.yml`.
+- Host (Server) mode (you want the UI here): `host/`.
+- Server with nginx proxy (UI behind reverse proxy): `nginx/`.
+- Edge Agent only mode (UI is elsewhere): `edge-agent/`.
 - Swarm with global agents: deploy the server using `docker stack deploy` with a server compose, then add a Swarm agent stack file (not presently in repo) defining a global agent service.
 
-Copy command examples:
+Example:
 
 ```bash
-# Host (Portainer Server) mode
-cp docker-compose-host.yml docker-compose.yml
-
-# Edge Agent only mode
-cp docker-compose-edge-agent.yml docker-compose.yml
-
-# Server with nginx proxy mode
-cp docker-compose-nginx.yml docker-compose.yml
+cd host                      # or nginx / edge-agent
+cp .env.example .env         # then edit .env
+cd .. && sudo ./create_volumes.sh host   # not needed for edge-agent
+cd host && docker compose up -d
 ```
 
-After copying, adjust `.env` (especially Edge ID / Edge Key for edge mode) before `docker compose up -d`.
-
-> NOTE: `docker-compose.yml` is **gitignored** — it is not included in the repository. You must create it by copying one of the templates (`docker-compose-host.yml` or `docker-compose-edge-agent.yml`) before running `docker compose up -d`.
+The three variants all use the same container names, so run only one per host.
 
 ---
 
 ## Files
 
-- `docker-compose-host.yml` – Template for running the Portainer Server locally.
-- `docker-compose-edge-agent.yml` – Template for running ONLY the Edge Agent on this node.
-- `docker-compose-nginx.yml` – Template for running Portainer Server behind an nginx reverse proxy (nginx `1.31.3-alpine`).
-- `docker-compose.yml` – Active file Docker Compose will use. **Not tracked in git** — create by copying one of the templates.
-- `create_volumes.sh` – Creates the bind-mounted data directory (`/storage/portainer/data`). Requires root (`sudo`).
-- `.env` / `.env.example` – Centralized configuration variables.
+- `host/` – `docker-compose.yml` + `.env.example` for the Portainer Server.
+- `nginx/` – `docker-compose.yml`, `.env.example` and `nginx.conf` for Portainer Server behind nginx.
+- `edge-agent/` – `docker-compose.yml` + `.env.example` for ONLY the Edge Agent on this node.
+- `create_volumes.sh` – Creates the bind-mounted data directory for a variant: `sudo ./create_volumes.sh <host|nginx|edge-agent>`. Requires root.
 - `SECURITY_HARDENING.md` – Detailed documentation of all security hardening measures applied.
-- `nginx.conf` – nginx configuration file mounted into the nginx-proxy container (see `docker-compose-nginx.yml`).
 - (Not included) `docker-compose-agent.yml` – Would define a Swarm global agent service if you add Swarm later.
 
 ---
 
 ## Environment Variables
 
-Defined in `.env` (copy from `.env.example` first):
+Defined in `<variant>/.env` (copy from that folder's `.env.example` first; each variant only uses the variables it lists):
 
 | Variable                | Purpose                                               | Typical Value                |
 | ----------------------- | ----------------------------------------------------- | ---------------------------- |
 | `SHARED_DOCKER_NETWORK` | External network both services join                   | `cloudflared_shared-network` |
-| `PORTAINER_PORT`        | Host port exposing Portainer UI HTTP (container 9000) | `9000`                       |
+| `PORTAINER_VERSION`     | Portainer server/agent image tag (pinned)             | `2.45.3`                     |
 | `PORTAINER_HTTPS_PORT`  | Host port exposing Portainer UI HTTPS (container 9443)| `9443`                       |
-| `PORTAINER_AGENT_PORT`  | Host port exposing Edge Agent (maps container 9001)   | `9001`                       |
+| `NGINX_PORT`            | Host port for the nginx variant (127.0.0.1 only)      | `8080`                       |
 
-You may change the host bind directory in the compose files if `/storage/portainer/data` is not suitable.
+Change `DEFAULT_STORAGE_FOLDER` in `.env` if `/storage/portainer/data` is not suitable.
 
 ### Additional Environment Variables (Edge Agent Mode)
 
-These are only required (or meaningful) when you deploy using `docker-compose-edge-agent.yml` (Edge Agent only mode). Names below match `.env.example` and the compose templates:
+These are only required (or meaningful) when you deploy using `edge-agent/` (Edge Agent only mode). Names below match `edge-agent/.env.example`:
 
 | Variable                       | Required | Purpose                                                      | Notes                                                                                              |
 | ------------------------------ | -------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
@@ -97,8 +89,7 @@ Security tips:
 The compose files in this repo have been hardened with the following measures:
 
 ### Image Pinning
-- Images currently use `:latest` for automatic updates.
-- For stricter supply-chain control, pin to a specific version (e.g., `portainer/portainer-ce:2.39.6` and `portainer/agent:2.39.6`) and update deliberately after reviewing release notes.
+- Images are pinned via `PORTAINER_VERSION` (default `2.45.3`) instead of `:latest`. Bump it deliberately after reviewing release notes.
 
 ### Network Binding
 - All host port mappings bind to `127.0.0.1` (localhost only) so services are not exposed to external interfaces.
@@ -116,13 +107,13 @@ The compose files in this repo have been hardened with the following measures:
 - Server: 512 MB memory, 1 CPU. Agent: 256 MB memory, 0.5 CPU.
 
 ### Healthchecks
-- Both server and agent include healthchecks so Docker can detect and restart unhealthy containers.
+- Only the nginx proxy has a healthcheck. The Portainer server and agent images are scratch-based (no shell, `wget` or `curl`), so a CMD-based check always reports `unhealthy`.
 
 ### Data Directory Permissions
 - `create_volumes.sh` sets `chmod 750` (owner rwx, group rx, no world access) instead of the previous `777`.
 
 ### HTTPS
-- The Portainer server exposes port `9443` (HTTPS) in addition to `9000` (HTTP). Prefer `https://localhost:9443` for direct access.
+- The host variant publishes only `9443` (HTTPS); plain HTTP is disabled by default in Portainer. The nginx variant enables HTTP on a private internal network that only nginx can reach.
 - Portainer generates a self-signed certificate by default; configure your own certificate in the Portainer UI for production.
 
 ### Remaining Risk: Docker Socket
@@ -137,30 +128,27 @@ The compose files in this repo have been hardened with the following measures:
 Use this if you only need to manage the local Docker engine.
 
 ```bash
-# 1. Copy the host mode configuration
-cp docker-compose-host.yml docker-compose.yml
+# 1. Set up your environment file
+cp host/.env.example host/.env
 
-# 2. Set up your environment file
-cp .env.example .env
+# 2. Create storage directories
+sudo ./create_volumes.sh host
 
-# 3. Create storage directories
-sudo ./create_volumes.sh
-
-# 4. Create the Docker network
+# 3. Create the Docker network
 docker network create cloudflared_shared-network
 
-# 5. Start Portainer
-docker compose up -d
+# 4. Start Portainer (from inside the variant folder)
+cd host && docker compose up -d
 
-# 6. (Server mode) Access UI
-# HTTP:   http://localhost:9000
-# HTTPS:  https://localhost:9443
-# (Replace 9000/9443 with your PORTAINER_PORT/PORTAINER_HTTPS_PORT if changed in .env)
+# 5. (Server mode) Access UI
+# HTTPS:  https://localhost:9443   (host variant; HTTP is disabled by default in Portainer)
+# nginx variant: http://localhost:8080
+# (Replace the ports with PORTAINER_HTTPS_PORT / NGINX_PORT if changed in .env)
 
-# Edge Agent mode: No local UI. In your remote Portainer instance, add/register the Edge environment using the Edge ID / Edge Key you placed in `.env`.
+# Edge Agent mode (edge-agent/): No local UI. In your remote Portainer instance, add/register the Edge environment using the Edge ID / Edge Key you placed in `edge-agent/.env`.
 ```
 
-Cleanup (optional):
+Cleanup (optional). Run these inside the variant folder (`host/`, `nginx/` or `edge-agent/`):
 
 ```bash
 # Check if Portainer is running
@@ -212,14 +200,14 @@ Why attachable? It allows non-swarm (standalone) containers or troubleshooting s
 ### 3. Prepare Environment & Data
 
 ```bash
-cp .env.example .env
-sudo ./create_volumes.sh
+cp host/.env.example host/.env
+sudo ./create_volumes.sh host
 ```
 
 ### 4. Deploy Portainer Server as a Stack
 
 ```bash
-docker stack deploy -c docker-compose-host.yml portainer
+docker stack deploy -c host/docker-compose.yml portainer
 ```
 
 ### 5. Deploy Portainer Agent Stack (Add Your Own File)
@@ -264,7 +252,7 @@ Open:
 http://<manager-host>:9000
 ```
 
-Replace `9000` with your `PORTAINER_PORT` if changed in `.env`.
+Swarm stacks do not read `.env` automatically; export the variables or use `docker compose config` to render the file first.
 
 On first login, create the admin user, then add the managed environments (the local swarm + agents should auto-register or appear for association).
 
@@ -283,7 +271,7 @@ Pull new images and redeploy:
 ```bash
 docker pull portainer/portainer-ce:latest
 docker pull portainer/agent:latest
-docker stack deploy -c docker-compose-host.yml portainer
+docker stack deploy -c host/docker-compose.yml portainer
 docker stack deploy -c docker-compose-agent.yml portainer-agent
 ```
 

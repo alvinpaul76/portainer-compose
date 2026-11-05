@@ -1,1 +1,4 @@
 .env
+
+# Infisical agent credentials (only secret left on disk)
+edge-agent/.env.agent

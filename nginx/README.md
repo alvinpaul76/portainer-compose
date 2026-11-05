@@ -14,7 +14,8 @@ Portainer Server on a private internal network, fronted by nginx (`1.31.3-alpine
 | ------------------------ | --------------------------------------------------------- | ---------------------------- |
 | `SHARED_DOCKER_NETWORK`  | External network nginx joins (required)                   | `cloudflared_shared-network` |
 | `DEFAULT_STORAGE_FOLDER` | Base dir; data is bind-mounted at `<dir>/data` (required) | `/storage/portainer`         |
-| `PORTAINER_VERSION`      | Pinned Portainer image tag                                | `2.45.3`                     |
+| `PORTAINER_IMAGE`        | Pinned Portainer image                                    | `portainer/portainer-ce:2.45.3`  |
+| `NGINX_IMAGE`            | Pinned nginx image                                        | `nginx:1.31.3-alpine`                   |
 | `NGINX_PORT`             | Host port for nginx (container 80), on 127.0.0.1          | `8080`                       |
 
 ## Deploy

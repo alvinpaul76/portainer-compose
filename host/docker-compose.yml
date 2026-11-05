@@ -13,7 +13,7 @@ volumes:
 
 services:
   portainer:
-    image: portainer/portainer-ce:${PORTAINER_VERSION:-2.45.3}
+    image: ${PORTAINER_IMAGE:?PORTAINER_IMAGE is required}
     container_name: portainer
     networks:
       - shared-network

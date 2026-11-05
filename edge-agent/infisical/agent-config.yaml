@@ -1,0 +1,19 @@
+infisical:
+  address: "__INFISICAL_ADDRESS__"
+
+auth:
+  type: "universal-auth"
+  config:
+    client-id: "/run/infisical-auth/client-id"
+    client-secret: "/run/infisical-auth/client-secret"
+    remove_client_secret_on_read: false
+
+sinks:
+  - type: "file"
+    config:
+      path: "/shared-secrets/.agent-token"
+
+templates:
+  - source-path: "/run/infisical-tpl/portainer-edge.tpl"
+    destination-path: "/shared-secrets/portainer-edge.env"
+    template-id: "portainer-edge-env"

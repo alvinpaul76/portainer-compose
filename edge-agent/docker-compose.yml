@@ -10,21 +10,104 @@ volumes:
       type: none
       device: ${DEFAULT_STORAGE_FOLDER:?set DEFAULT_STORAGE_FOLDER in .env}/agent_data
       o: bind
+  shared_secrets: {}   # Docker-managed, persistent; last rendered file is the offline fallback (avoid `down -v`)
+  busybox_bin: {}      # static busybox, so the shell-less Portainer image can run the secrets wrapper
 
 services:
+  infisical-agent:
+    image: ${INFISICAL_CLI_IMAGE:?INFISICAL_CLI_IMAGE must be set in .env (pin a version, e.g. infisical/cli:0.44.15)}
+    entrypoint: ["/sbin/tini", "--", "/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        test -n "$$INFISICAL_UNIVERSAL_AUTH_CLIENT_ID" && test -n "$$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET" || { echo "Infisical Universal Auth credentials are required" >&2; exit 1; }
+        test -n "$$INFISICAL_ADDRESS" && test -n "$$INFISICAL_PROJECT_ID" && test -n "$$INFISICAL_ENV" || { echo "INFISICAL_ADDRESS, INFISICAL_PROJECT_ID and INFISICAL_ENV are required" >&2; exit 1; }
+        # sed uses | as delimiter and & is special in the replacement: allow only URL/id/slug characters.
+        case "$$INFISICAL_ADDRESS$$INFISICAL_PROJECT_ID$$INFISICAL_ENV" in *[!A-Za-z0-9._:/-]*) echo "INFISICAL_ADDRESS/INFISICAL_PROJECT_ID/INFISICAL_ENV contain invalid characters" >&2; exit 1 ;; esac
+        # umask only for the credential and template files: the rendered file must stay readable by consumers.
+        ( umask 077
+          sed -e "s|__INFISICAL_ADDRESS__|$$INFISICAL_ADDRESS|g" /templates/agent-config.yaml > /run/infisical-tpl/agent-config.yaml
+          sed -e "s|__INFISICAL_PROJECT_ID__|$$INFISICAL_PROJECT_ID|g" -e "s|__INFISICAL_ENV__|$$INFISICAL_ENV|g" /templates/portainer-edge.tpl > /run/infisical-tpl/portainer-edge.tpl
+          printf '%s' "$$INFISICAL_UNIVERSAL_AUTH_CLIENT_ID" > /run/infisical-auth/client-id
+          printf '%s' "$$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET" > /run/infisical-auth/client-secret )
+        unset INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+        exec /bin/infisical agent --config=/run/infisical-tpl/agent-config.yaml
+    env_file:
+      - .env.agent
+    volumes:
+      - ./infisical/agent-config.yaml:/templates/agent-config.yaml:ro
+      - ./infisical/templates/portainer-edge.tpl:/templates/portainer-edge.tpl:ro
+      - shared_secrets:/shared-secrets
+    tmpfs:
+      - /run/infisical-auth:mode=0700
+      - /run/infisical-tpl:mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          test -s /shared-secrets/.agent-token &&
+          grep -qx '# render-complete' /shared-secrets/portainer-edge.env
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # One-shot: copies a static busybox into busybox_bin. restart "no" because it must not loop;
+  # the volume persists, so it is not needed again on reboot.
+  busybox-init:
+    image: ${BUSYBOX_IMAGE:?BUSYBOX_IMAGE must be set in .env (static build, e.g. busybox:1.38.0-musl)}
+    command: ["cp", "/bin/busybox", "/busybox/busybox"]
+    volumes:
+      - busybox_bin:/busybox
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   agent:
-    image: portainer/agent:${PORTAINER_VERSION:-2.45.3}
+    image: ${PORTAINER_AGENT_IMAGE:?PORTAINER_AGENT_IMAGE is required}
     container_name: portainer-agent
     restart: unless-stopped
+    depends_on:
+      infisical-agent:
+        condition: service_healthy
+      busybox-init:
+        condition: service_completed_successfully
+    # The image has no shell: run the bundled static busybox to read the rendered secrets, then exec the original ./agent.
+    entrypoint: ["/busybox/busybox", "sh", "-c"]
+    command:
+      - |
+        set -e
+        until [ -s /shared-secrets/portainer-edge.env ]; do /busybox/busybox sleep 1; done
+        while IFS= read -r line || [ -n "$$line" ]; do
+          case "$$line" in
+            PORTAINER_EDGE_ID=*|PORTAINER_EDGE_KEY=*) export "$$line" ;;
+          esac
+        done < /shared-secrets/portainer-edge.env
+        test -n "$$PORTAINER_EDGE_ID" || { echo "PORTAINER_EDGE_ID missing from portainer-edge.env" >&2; exit 1; }
+        test -n "$$PORTAINER_EDGE_KEY" || { echo "PORTAINER_EDGE_KEY missing from portainer-edge.env" >&2; exit 1; }
+        export EDGE_ID="$$PORTAINER_EDGE_ID" EDGE_KEY="$$PORTAINER_EDGE_KEY"
+        unset PORTAINER_EDGE_ID PORTAINER_EDGE_KEY
+        cd /app
+        exec ./agent
     # Edge mode polls the Portainer server outbound, so no inbound port is published.
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/volumes:/var/lib/docker/volumes
       - agent_data:/data
+      - shared_secrets:/shared-secrets:ro
+      - busybox_bin:/busybox:ro
     environment:
       - EDGE=1
-      - EDGE_ID=${PORTAINER_EDGE_ID:?set PORTAINER_EDGE_ID in .env}
-      - EDGE_KEY=${PORTAINER_EDGE_KEY:?set PORTAINER_EDGE_KEY in .env}
       - EDGE_INSECURE_POLL=${PORTAINER_EDGE_INSECURE_POLL:-0}
       - LOG_LEVEL=${PORTAINER_LOG_LEVEL:-INFO}
       - AGENT_CLUSTER_ADDR=${AGENT_CLUSTER_ADDR:?set AGENT_CLUSTER_ADDR in .env}

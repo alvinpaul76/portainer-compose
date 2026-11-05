@@ -13,7 +13,7 @@ Portainer Server (UI + management backend) managing the local Docker engine. Pub
 | ------------------------ | ------------------------------------------------------ | ---------------------------- |
 | `SHARED_DOCKER_NETWORK`  | External network the container joins (required)        | `cloudflared_shared-network` |
 | `DEFAULT_STORAGE_FOLDER` | Base dir; data is bind-mounted at `<dir>/data` (required) | `/storage/portainer`      |
-| `PORTAINER_VERSION`      | Pinned Portainer image tag                             | `2.45.3`                     |
+| `PORTAINER_IMAGE`        | Pinned Portainer image                                 | `portainer/portainer-ce:2.45.3`                   |
 | `PORTAINER_HTTPS_PORT`   | Host port for the UI (container 9443), on 127.0.0.1    | `9443`                       |
 
 ## Deploy
@@ -40,6 +40,6 @@ docker compose restart
 docker compose down
 ```
 
-To upgrade, bump `PORTAINER_VERSION` in `.env` after reading the release notes, then `docker compose pull && docker compose up -d`.
+To upgrade, bump `PORTAINER_IMAGE` in `.env` after reading the release notes, then `docker compose pull && docker compose up -d`.
 
 See [`../SECURITY_HARDENING.md`](../SECURITY_HARDENING.md) for the hardening applied.

@@ -8,12 +8,12 @@ This document summarizes the security hardening changes applied to the Portainer
 
 ## 1. Image Pinning
 
-Images are pinned via `PORTAINER_VERSION` (default `2.45.3`).
+Images are pinned via `PORTAINER_IMAGE`, `PORTAINER_AGENT_IMAGE` and `NGINX_IMAGE` (full reference, no default).
 
 | Service           | Current Tag                      | Recommended (pinned)            |
 | ----------------- | -------------------------------- | ------------------------------- |
-| Portainer Server  | `portainer/portainer-ce:${PORTAINER_VERSION}` | `portainer/portainer-ce:2.45.3` |
-| Portainer Agent   | `portainer/agent:${PORTAINER_VERSION}`        | `portainer/agent:2.45.3`        |
+| Portainer Server  | `${PORTAINER_IMAGE}` | `portainer/portainer-ce:2.45.3` |
+| Portainer Agent   | `${PORTAINER_AGENT_IMAGE}` | `portainer/agent:2.45.3`        |
 
 **Recommendation:** For stricter supply-chain control, pin to a specific version and update deliberately after reviewing release notes.
 
@@ -108,7 +108,7 @@ The Portainer server and agent images are scratch-based (no shell, `wget` or `cu
 | `host/docker-compose.yml`         | Image pin, HTTPS port, localhost binding, isolation, resource limits |
 | `edge-agent/docker-compose.yml`   | Image pin, localhost binding, isolation, resource limits, `/data` named volume, no inbound port |
 | `create_volumes.sh`               | `chmod 777` → `chmod 750`                                  |
-| `<variant>/.env.example`          | Per-variant env files; `LOG_LEVEL` → `INFO`, pinned `PORTAINER_VERSION` |
+| `<variant>/.env.example`          | Per-variant env files; `LOG_LEVEL` → `INFO`, pinned image variables |
 | `README.md`                       | Added Security Hardening section, updated env var table, updated notes |
 
 ---

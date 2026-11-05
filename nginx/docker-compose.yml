@@ -16,7 +16,7 @@ volumes:
 
 services:
   portainer:
-    image: portainer/portainer-ce:${PORTAINER_VERSION:-2.45.3}
+    image: ${PORTAINER_IMAGE:?PORTAINER_IMAGE is required}
     container_name: portainer
     command: ["--http-enabled"]   # HTTP is off by default; nginx proxies to :9000 over the private network
     networks:
@@ -41,7 +41,7 @@ services:
     # No healthcheck: the Portainer image is scratch-based (no shell, wget or curl).
 
   nginx-proxy:
-    image: nginx:1.31.3-alpine
+    image: ${NGINX_IMAGE:?NGINX_IMAGE is required}
     container_name: portainer-nginx
     networks:
       - portainer_internal

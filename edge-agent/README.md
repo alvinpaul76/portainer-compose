@@ -15,8 +15,8 @@ Portainer Edge Agent only. This node is managed remotely by an existing Portaine
 | ------------------------------ | -------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `SHARED_DOCKER_NETWORK`        | Yes      | External network the agent joins                         | `cloudflared_shared-network`                                                      |
 | `DEFAULT_STORAGE_FOLDER`       | Yes      | Host directory holding the `agent_data` bind mount       | `/storage/portainer`; created by `create_volumes.sh`.                             |
-| `PORTAINER_AGENT_IMAGE`        | Yes      | Pinned agent image                                       | `portainer/agent:2.45.3`; keep in line with server.                               |
-| `INFISICAL_CLI_IMAGE`          | Yes      | Pinned Infisical agent image                             | `infisical/cli:0.44.15`.                                                           |
+| `PORTAINER_AGENT_IMAGE`        | Yes      | Pinned agent image                                       | `portainer/agent:2.45.4`; keep in line with server.                               |
+| `INFISICAL_CLI_IMAGE`          | Yes      | Pinned Infisical agent image                             | `infisical/cli:0.45.14`.                                                           |
 | `BUSYBOX_IMAGE`                | Yes      | Pinned static busybox image                              | `busybox:1.38.0-musl`; must be a static build.                                    |
 | `PORTAINER_EDGE_INSECURE_POLL` | No       | Allow non-TLS polling                                    | `1` only for development against a non-TLS server; keep `0` in production.        |
 | `PORTAINER_LOG_LEVEL`          | No       | Agent log verbosity                                      | `INFO` in production; `DEBUG` may log sensitive request data.                     |

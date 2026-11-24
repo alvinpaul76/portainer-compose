@@ -12,10 +12,10 @@ Images are pinned via `PORTAINER_IMAGE`, `PORTAINER_AGENT_IMAGE`, `NGINX_IMAGE`,
 
 | Service           | Current Tag                      | Recommended (pinned)            |
 | ----------------- | -------------------------------- | ------------------------------- |
-| Portainer Server  | `${PORTAINER_IMAGE}` | `portainer/portainer-ce:2.45.3` |
-| Portainer Agent   | `${PORTAINER_AGENT_IMAGE}` | `portainer/agent:2.45.3`        |
+| Portainer Server  | `${PORTAINER_IMAGE}` | `portainer/portainer-ce:2.45.4` |
+| Portainer Agent   | `${PORTAINER_AGENT_IMAGE}` | `portainer/agent:2.45.4`        |
 | nginx             | `${NGINX_IMAGE}`           | `nginx:1.31.3-alpine`           |
-| Infisical CLI     | `${INFISICAL_CLI_IMAGE}`   | `infisical/cli:0.44.15`         |
+| Infisical CLI     | `${INFISICAL_CLI_IMAGE}`   | `infisical/cli:0.45.14`         |
 | busybox (static)  | `${BUSYBOX_IMAGE}`         | `busybox:1.38.0-musl`           |
 
 **Recommendation:** For stricter supply-chain control, pin to a specific version and update deliberately after reviewing release notes.

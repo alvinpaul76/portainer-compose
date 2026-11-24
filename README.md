@@ -42,7 +42,6 @@ Each variant documents its own environment variables, deploy steps and operation
 ## Repository layout
 
 - `host/`, `nginx/`, `edge-agent/` – one deployment each: `docker-compose.yml`, `.env.example`, `README.md`. `nginx/` also has `nginx.conf`; `edge-agent/` also has `.env.agent.example` and `infisical/` (sidecar config and secret template).
-- `.infisical.yaml` – Infisical CLI project link (project ID only, no secrets).
 - `.scratch/` – Per-change notes (resolved issue write-ups); not needed for deployment.
 - `create_volumes.sh` – Creates the bind-mounted data directory for a variant: `sudo ./create_volumes.sh <host|nginx|edge-agent>`. Requires root.
 - `SECURITY_HARDENING.md` – Security measures applied to the compose files, and remaining risks (notably Docker socket access).

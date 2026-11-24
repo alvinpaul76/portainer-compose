@@ -6,7 +6,7 @@ This repository provides Compose variants so you can choose the deployment role 
 2. `nginx/` – Portainer Server behind an nginx reverse proxy (nginx `1.31.3-alpine`) on a private network, exposing the UI on `127.0.0.1:8080` for Cloudflare Tunnel or similar. This is the more locked-down server variant.
 3. `edge-agent/` – Portainer Edge Agent only (this node is managed remotely by an existing Portainer instance – no local UI).
 
-Each folder is an independent deployment with its own `docker-compose.yml` and `.env.example`. Copy `.env.example` to `.env` inside the folder you pick, then run `docker compose up -d` there.
+Each folder is an independent deployment with its own `docker-compose.yml`, `.env.example` and `README.md`. Copy `.env.example` to `.env` inside the folder you pick, then run `docker compose up -d` there. `edge-agent/` additionally needs `.env.agent` (Infisical credentials); see its README.
 
 NOTE ABOUT SWARM: A Swarm "global" agent compose file (`docker-compose-agent.yml`) is referenced in some Portainer docs but is NOT included in this repo right now. If you intend to run a Swarm with a global agent service, you can add that file later (see the Swarm section for guidance). Until then, this repo focuses on single‑node server mode or Edge Agent mode.
 
@@ -20,9 +20,8 @@ HOW TO CHOOSE:
 Example:
 
 ```bash
-cd host                      # or nginx / edge-agent
-cp .env.example .env         # then edit .env
-cd .. && sudo ./create_volumes.sh host   # run for every variant
+cp host/.env.example host/.env           # or nginx / edge-agent; then edit .env
+sudo ./create_volumes.sh host            # run for every variant (same name as above)
 cd host && docker compose up -d
 ```
 
@@ -42,14 +41,15 @@ Each variant documents its own environment variables, deploy steps and operation
 
 ## Repository layout
 
-- `host/`, `nginx/`, `edge-agent/` – one deployment each: `docker-compose.yml`, `.env.example`, `README.md` (nginx also has `nginx.conf`).
+- `host/`, `nginx/`, `edge-agent/` – one deployment each: `docker-compose.yml`, `.env.example`, `README.md`. `nginx/` also has `nginx.conf`; `edge-agent/` also has `.env.agent.example` and `infisical/` (sidecar config and secret template).
+- `.scratch/` – Per-change notes (resolved issue write-ups); not needed for deployment.
 - `create_volumes.sh` – Creates the bind-mounted data directory for a variant: `sudo ./create_volumes.sh <host|nginx|edge-agent>`. Requires root.
 - `SECURITY_HARDENING.md` – Security measures applied to the compose files, and remaining risks (notably Docker socket access).
 - (Not included) `docker-compose-agent.yml` – Would define a Swarm global agent service if you add Swarm later.
 
 ## Security
 
-All variants pin image versions, bind published ports to `127.0.0.1`, drop all capabilities, use read-only root filesystems and set resource limits. Portainer needs the Docker socket, which grants full daemon access. See [SECURITY_HARDENING.md](SECURITY_HARDENING.md).
+All variants pin image versions (via required `*_IMAGE` variables in `.env`), bind published ports to `127.0.0.1`, drop all capabilities, use read-only root filesystems for the Portainer and nginx containers, and set resource limits. The `edge-agent/` variant keeps its Edge ID/Key in Infisical rather than on disk. Portainer needs the Docker socket, which grants full daemon access. See [SECURITY_HARDENING.md](SECURITY_HARDENING.md).
 
 ---
 
@@ -57,7 +57,7 @@ All variants pin image versions, bind published ports to `127.0.0.1`, drop all c
 
 Use Docker Swarm when you want Portainer Server to manage multiple nodes securely via the Agent. A Swarm agent stack file isn't bundled here; you can create one modeled on Portainer's official docs if needed.
 
-> **Warning:** The security hardening directives in the compose files (`read_only`, `tmpfs`, `cap_drop`, `security_opt`, `mem_limit`, `cpus`, `pids_limit`) are **Compose v2 options** that `docker stack deploy` silently ignores. If you deploy via Swarm, these protections will NOT be applied. To harden Swarm deployments, use `deploy.resources.limits` for resource constraints and apply `security_opt`/`cap_drop` via Swarm service configs or a custom image.
+> **Warning:** Only `host/` is a sensible Swarm candidate. `edge-agent/` relies on `depends_on` conditions and one-shot services that `docker stack deploy` does not support, and `nginx/` uses `internal` networks and `container_name`. The security hardening directives in the compose files (`read_only`, `tmpfs`, `cap_drop`, `security_opt`, `mem_limit`, `cpus`, `pids_limit`) are **Compose v2 options** that `docker stack deploy` silently ignores. If you deploy via Swarm, these protections will NOT be applied. To harden Swarm deployments, use `deploy.resources.limits` for resource constraints and apply `security_opt`/`cap_drop` via Swarm service configs or a custom image.
 
 ### 1. Initialize Swarm (on manager node)
 
@@ -156,8 +156,9 @@ docker stack services portainer-agent
 Pull new images and redeploy:
 
 ```bash
-docker pull portainer/portainer-ce:latest
-docker pull portainer/agent:latest
+# Bump PORTAINER_IMAGE (and your agent image) in .env first, then:
+docker pull "$PORTAINER_IMAGE"
+docker pull portainer/agent:<same-version>
 docker stack deploy -c host/docker-compose.yml portainer
 docker stack deploy -c docker-compose-agent.yml portainer-agent
 ```
@@ -167,7 +168,7 @@ docker stack deploy -c docker-compose-agent.yml portainer-agent
 ```bash
 docker stack rm portainer-agent
 docker stack rm portainer
-docker network rm cloudflared_shared-network
+docker network rm "$SHARED_DOCKER_NETWORK"
 ```
 
 ---
@@ -190,7 +191,7 @@ Variant-specific issues are covered in each variant's README. General checks:
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## Additional Resources
 

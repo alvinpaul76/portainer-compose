@@ -4,7 +4,7 @@ Portainer Edge Agent only. This node is managed remotely by an existing Portaine
 
 ## Files
 
-- `docker-compose.yml` – the `agent` service (`EDGE=1` is set in the compose file).
+- `docker-compose.yml` – three services: `agent` (Portainer Edge Agent, `EDGE=1`), `infisical-agent` (sidecar that fetches the Edge ID/Key) and `busybox-init` (one-shot helper).
 - `infisical/` – agent config and secret template for the Infisical sidecar (committed; deployment values are substituted at start from `.env.agent`).
 - `.env.agent.example` – copy to `.env.agent`, then `chmod 600 .env.agent` (see [Infisical secrets](#infisical-secrets)).
 - `.env.example` – copy to `.env` and adjust. `agent_data` is bind-mounted at `${DEFAULT_STORAGE_FOLDER}/agent_data`; create it first with `sudo ./create_volumes.sh edge-agent` (run from the repo root).
@@ -15,8 +15,8 @@ Portainer Edge Agent only. This node is managed remotely by an existing Portaine
 | ------------------------------ | -------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `SHARED_DOCKER_NETWORK`        | Yes      | External network the agent joins                         | `cloudflared_shared-network`                                                      |
 | `DEFAULT_STORAGE_FOLDER`       | Yes      | Host directory holding the `agent_data` bind mount       | `/storage/portainer`; created by `create_volumes.sh`.                             |
-| `PORTAINER_AGENT_IMAGE`        | Yes      | Pinned agent image                                       | `portainer/agent:2.45.3`; keep in line with server.                               |
-| `INFISICAL_CLI_IMAGE`          | Yes      | Pinned Infisical agent image                             | `infisical/cli:0.44.15`.                                                           |
+| `PORTAINER_AGENT_IMAGE`        | Yes      | Pinned agent image                                       | `portainer/agent:2.45.4`; keep in line with server.                               |
+| `INFISICAL_CLI_IMAGE`          | Yes      | Pinned Infisical agent image                             | `infisical/cli:0.45.14`.                                                           |
 | `BUSYBOX_IMAGE`                | Yes      | Pinned static busybox image                              | `busybox:1.38.0-musl`; must be a static build.                                    |
 | `PORTAINER_EDGE_INSECURE_POLL` | No       | Allow non-TLS polling                                    | `1` only for development against a non-TLS server; keep `0` in production.        |
 | `PORTAINER_LOG_LEVEL`          | No       | Agent log verbosity                                      | `INFO` in production; `DEBUG` may log sensitive request data.                     |
@@ -41,6 +41,7 @@ Prerequisites: an Infisical project with secrets `PORTAINER_EDGE_ID` and `PORTAI
 Operations:
 
 - After changing a secret in Infisical: `docker compose restart agent` (read only at start).
+- `docker compose ps`: `infisical-agent` must be `healthy` before `agent` starts; `busybox-init` shows `Exited (0)`, which is expected.
 - Offline: the last rendered file stays in `shared_secrets`, so the agent still starts if Infisical is unreachable.
 - Do not run `docker compose down -v` casually: it deletes that fallback file.
 
@@ -63,6 +64,7 @@ Never commit real Edge ID/Key values or `.env.agent`.
 
 ## Troubleshooting
 
+- `error while mounting volume ... no such file or directory` for `agent_data`: the bind-mount directory is missing; run `sudo ./create_volumes.sh edge-agent` from the repo root.
 - Agent crashes with `mkdir /data: read-only file system`: the container is `read_only`, so `agent_data:/data` must be present in the compose file's `volumes`.
 - `docker compose logs infisical-agent`: a login error means wrong client ID/secret; a 404 or missing key means placeholder values in `.env.agent`, or a wrong secret name, project ID or env slug.
 - `INFISICAL_CLI_IMAGE`/`BUSYBOX_IMAGE must be set`: add them to `.env` (see `.env.example`).

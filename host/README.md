@@ -13,7 +13,7 @@ Portainer Server (UI + management backend) managing the local Docker engine. Pub
 | ------------------------ | ------------------------------------------------------ | ---------------------------- |
 | `SHARED_DOCKER_NETWORK`  | External network the container joins (required)        | `cloudflared_shared-network` |
 | `DEFAULT_STORAGE_FOLDER` | Base dir; data is bind-mounted at `<dir>/data` (required) | `/storage/portainer`      |
-| `PORTAINER_IMAGE`        | Pinned Portainer image                                 | `portainer/portainer-ce:2.45.3`                   |
+| `PORTAINER_IMAGE`        | Pinned Portainer image                                 | `portainer/portainer-ce:2.45.4`                   |
 | `PORTAINER_HTTPS_PORT`   | Host port for the UI (container 9443), on 127.0.0.1    | `9443`                       |
 
 ## Deploy

@@ -8,12 +8,15 @@ This document summarizes the security hardening changes applied to the Portainer
 
 ## 1. Image Pinning
 
-Images are pinned via `PORTAINER_IMAGE`, `PORTAINER_AGENT_IMAGE` and `NGINX_IMAGE` (full reference, no default).
+Images are pinned via `PORTAINER_IMAGE`, `PORTAINER_AGENT_IMAGE`, `NGINX_IMAGE`, `INFISICAL_CLI_IMAGE` and `BUSYBOX_IMAGE` (full reference, no default).
 
 | Service           | Current Tag                      | Recommended (pinned)            |
 | ----------------- | -------------------------------- | ------------------------------- |
 | Portainer Server  | `${PORTAINER_IMAGE}` | `portainer/portainer-ce:2.45.3` |
 | Portainer Agent   | `${PORTAINER_AGENT_IMAGE}` | `portainer/agent:2.45.3`        |
+| nginx             | `${NGINX_IMAGE}`           | `nginx:1.31.3-alpine`           |
+| Infisical CLI     | `${INFISICAL_CLI_IMAGE}`   | `infisical/cli:0.44.15`         |
+| busybox (static)  | `${BUSYBOX_IMAGE}`         | `busybox:1.38.0-musl`           |
 
 **Recommendation:** For stricter supply-chain control, pin to a specific version and update deliberately after reviewing release notes.
 
@@ -55,7 +58,8 @@ Makes the container filesystem read-only. Writable areas are provided via `tmpfs
 
 ### `tmpfs` Mounts
 - **Server:** `/tmp`
-- **Agent:** `/tmp` (agent `/data` uses a named volume for persistence across restarts)
+- **Agent:** `/tmp` (agent `/data` is a bind mount at `${DEFAULT_STORAGE_FOLDER}/agent_data` for persistence across restarts)
+- **nginx:** `/tmp`, `/var/cache/nginx`, `/run`
 
 ### `pids_limit`
 Restricts the number of processes the container can spawn (DoS mitigation).
@@ -79,7 +83,7 @@ Prevents a single container from exhausting host resources.
 
 ## 6. Healthchecks
 
-The Portainer server and agent images are scratch-based (no shell, `wget` or `curl`), so a CMD-based healthcheck can never succeed and has been removed. Only the nginx proxy has one (`wget --spider -q http://127.0.0.1:80/nginx-health`, 30s interval).
+The Portainer server and agent images are scratch-based (no shell, `wget` or `curl`), so a CMD-based healthcheck can never succeed and has been removed. The nginx proxy has one (`wget --spider -q http://127.0.0.1:80/nginx-health`, 30s interval), and so does the Edge variant's `infisical-agent` sidecar (checks that the secrets file has rendered); the Edge `agent` waits for it via `depends_on: service_healthy`.
 
 ---
 
@@ -106,10 +110,11 @@ The Portainer server and agent images are scratch-based (no shell, `wget` or `cu
 | File                              | Changes                                                    |
 | --------------------------------- | ---------------------------------------------------------- |
 | `host/docker-compose.yml`         | Image pin, HTTPS port, localhost binding, isolation, resource limits |
-| `edge-agent/docker-compose.yml`   | Image pin, localhost binding, isolation, resource limits, `/data` named volume, no inbound port |
+| `nginx/docker-compose.yml`        | Private internal network, no Portainer ports, nginx isolation and limits |
+| `edge-agent/docker-compose.yml`   | Image pin, isolation, resource limits, `/data` bind mount, no inbound port, Infisical sidecar for Edge ID/Key |
 | `create_volumes.sh`               | `chmod 777` → `chmod 750`                                  |
 | `<variant>/.env.example`          | Per-variant env files; `LOG_LEVEL` → `INFO`, pinned image variables |
-| `README.md`                       | Added Security Hardening section, updated env var table, updated notes |
+| `README.md`, `<variant>/README.md`| Security summary, per-variant env var tables and notes |
 
 ---
 
@@ -133,4 +138,15 @@ After applying `read_only: true`, the Portainer Edge Agent crashed with:
 FTL unable to associate Edge key | error="mkdir /data: read-only file system"
 ```
 
-**Fix:** The agent's `/data` directory is mounted as a named volume (`agent_data`) so the agent can write its Edge key and association data to a persistent writable directory while the rest of the filesystem remains read-only. This survives container restarts, unlike a `tmpfs` mount which would lose data on every restart.
+**Fix:** The agent's `/data` directory is mounted from the `agent_data` volume (a bind mount of `${DEFAULT_STORAGE_FOLDER}/agent_data`) so the agent can write its Edge key and association data to a persistent writable directory while the rest of the filesystem remains read-only. This survives container restarts, unlike a `tmpfs` mount which would lose data on every restart.
+
+---
+
+## 12. Edge Agent Secrets (Infisical)
+
+The Edge ID/Key are no longer stored in `.env`. An `infisical-agent` sidecar authenticates with a read-only Universal Auth identity and renders them into the `shared_secrets` volume, which the `agent` mounts read-only and reads at start via a static busybox (the Portainer image has no shell).
+
+- The only secret on disk is `edge-agent/.env.agent` (git-ignored; keep `chmod 600`). The sidecar copies its credentials to tmpfs and unsets them from its environment before starting.
+- Sidecar hardening: `cap_drop: ALL`, `no-new-privileges`, memory/CPU limits. Unlike the other containers it is **not** `read_only` (it needs to write its token and rendered files).
+- The last rendered file stays in `shared_secrets` as an offline fallback; `docker compose down -v` deletes it.
+- Anyone who can read that volume or run `docker compose exec` in the agent container can read the Edge Key.
